@@ -72,7 +72,7 @@ To add withers to an existing class:
 4. Select the fields
 5. Click **OK**
 
-The action is offered for non-generic classes that have a matching all-arguments constructor. Fields that already have a `withX(...)` method are skipped.
+The action is offered for classes with fields. It explains why it cannot generate anything when the class is generic, abstract, a record, has no matching all-arguments constructor, or already has withers for every field. Fields that already have a `withX(...)` method are skipped.
 
 ## Notes
 

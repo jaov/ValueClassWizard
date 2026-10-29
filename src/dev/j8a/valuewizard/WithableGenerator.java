@@ -47,12 +47,14 @@ public final class WithableGenerator implements CodeGenerator {
     private final JTextComponent component;
     private final ElementHandle<TypeElement> classHandle;
     private final List<WithableField> fields;
+    private final String error;
 
     private WithableGenerator(JTextComponent component,
-            ElementHandle<TypeElement> classHandle, List<WithableField> fields) {
+            ElementHandle<TypeElement> classHandle, List<WithableField> fields, String error) {
         this.component = component;
         this.classHandle = classHandle;
         this.fields = fields;
+        this.error = error;
     }
 
     @Override
@@ -62,6 +64,12 @@ public final class WithableGenerator implements CodeGenerator {
 
     @Override
     public void invoke() {
+        if (error != null) {
+            DialogDisplayer.getDefault().notifyLater(new NotifyDescriptor.Message(
+                    error, NotifyDescriptor.WARNING_MESSAGE));
+            return;
+        }
+
         WithablePanel panel = new WithablePanel(fields);
         int result = JOptionPane.showConfirmDialog(component, panel,
                 NbBundle.getMessage(WithableGenerator.class, "WithableGenerator.dialogTitle"),
@@ -304,17 +312,28 @@ public final class WithableGenerator implements CodeGenerator {
                 }
 
                 TypeElement type = (TypeElement) element;
-                if (type.getKind() != ElementKind.CLASS
-                        || type.getNestingKind() == NestingKind.ANONYMOUS
-                        || !type.getTypeParameters().isEmpty()
-                        || type.getModifiers().contains(Modifier.ABSTRACT)) {
+                if (type.getNestingKind() == NestingKind.ANONYMOUS) {
+                    return Collections.emptyList();
+                }
+                if (type.getKind() == ElementKind.RECORD) {
+                    return error(component, type, "WithableGenerator.error.record");
+                }
+                if (type.getKind() != ElementKind.CLASS) {
                     return Collections.emptyList();
                 }
 
                 List<VariableElement> declaredFields = collectFieldElements(type);
-                if (declaredFields.isEmpty()
-                        || !hasMatchingConstructor(type, declaredFields, controller.getTypes())) {
+                if (declaredFields.isEmpty()) {
                     return Collections.emptyList();
+                }
+                if (!type.getTypeParameters().isEmpty()) {
+                    return error(component, type, "WithableGenerator.error.generic");
+                }
+                if (type.getModifiers().contains(Modifier.ABSTRACT)) {
+                    return error(component, type, "WithableGenerator.error.abstract");
+                }
+                if (!hasMatchingConstructor(type, declaredFields, controller.getTypes())) {
+                    return error(component, type, "WithableGenerator.error.noConstructor");
                 }
 
                 List<WithableField> eligible = new ArrayList<>();
@@ -325,12 +344,12 @@ public final class WithableGenerator implements CodeGenerator {
                     }
                 }
                 if (eligible.isEmpty()) {
-                    return Collections.emptyList();
+                    return error(component, type, "WithableGenerator.error.none");
                 }
 
                 ElementHandle<TypeElement> classHandle = ElementHandle.create(type);
                 return Collections.singletonList(
-                        new WithableGenerator(component, classHandle, eligible));
+                        new WithableGenerator(component, classHandle, eligible, null));
             } catch (IOException ex) {
                 Exceptions.printStackTrace(ex);
                 return Collections.emptyList();
@@ -338,6 +357,13 @@ public final class WithableGenerator implements CodeGenerator {
                 Exceptions.printStackTrace(ex);
                 return Collections.emptyList();
             }
+        }
+
+        private static List<? extends CodeGenerator> error(
+                JTextComponent component, TypeElement type, String key) {
+            return Collections.singletonList(new WithableGenerator(
+                    component, ElementHandle.create(type), Collections.emptyList(),
+                    NbBundle.getMessage(WithableGenerator.class, key)));
         }
     }
 }
