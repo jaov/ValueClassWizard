@@ -1,0 +1,68 @@
+<#assign licenseFirst = "/*">
+<#assign licensePrefix = " * ">
+<#assign licenseLast = " */">
+<#include "${project.licensePath}">
+
+<#if package?? && package != "">
+package ${package};
+
+</#if>
+<#if imports?? && imports?has_content>
+<#list imports as imp>
+import ${imp};
+</#list>
+
+</#if>
+/**
+ * Immutable value class.
+ *
+ * @author ${user}
+ */
+public final class ${name} {
+
+<#list fields as field>
+    private final ${field.type} ${field.name};
+</#list>
+
+    public ${name}(<#list fields as field>${field.type} ${field.name}<#if field_has_next>, </#if></#list>) {
+<#list fields as field>
+        this.${field.name} = ${field.name};
+</#list>
+    }
+
+<#list fields as field>
+    public ${field.type} get${field.name?cap_first}() {
+        return this.${field.name};
+    }
+
+</#list>
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ${name} that = (${name}) o;
+        return <#if fields?size == 0>true<#else><#list fields as field>java.util.Objects.equals(this.${field.name}, that.${field.name})<#if field_has_next>
+                && </#if></#list></#if>;
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(<#list fields as field>this.${field.name}<#if field_has_next>, </#if></#list>);
+    }
+
+    @Override
+    public String toString() {
+<#if fields?size == 0>
+        return "${name}{}";
+<#else>
+        return "${name}{" +
+<#list fields as field>
+                "${field.name}=" + this.${field.name}<#if field_has_next> + ", " +<#else> + '}';</#if>
+</#list>
+</#if>
+    }
+}

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE filesystem PUBLIC "-//NetBeans//DTD Filesystem 1.2//EN" "http://www.netbeans.org/dtds/filesystem-1_2.dtd">
+<filesystem>
+    <folder name="Templates">
+        <folder name="Classes">
+            <file name="ValueClass.java" url="nbresloc:/dev/j8a/valuewizard/resources/ValueClass.java.template">
+                <attr name="template" boolvalue="true"/>
+                <attr name="position" intvalue="150"/>
+                <attr name="displayName" bundlevalue="dev.j8a.valuewizard.Bundle#ValueClass.java"/>
+                <attr name="iconBase" stringvalue="org/netbeans/spi/java/project/support/ui/templates/class.png"/>
+                <attr name="instantiatingIterator" newvalue="dev.j8a.valuewizard.ValueClassWizardIterator"/>
+                <attr name="javax.script.ScriptEngine" stringvalue="freemarker"/>
+                <attr name="templateCategory" stringvalue="java-classes,java-classes-basic"/>
+                <attr name="requireProject" boolvalue="true"/>
+            </file>
+        </folder>
+    </folder>
+</filesystem>
