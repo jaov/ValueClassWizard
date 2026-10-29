@@ -36,6 +36,12 @@ public final class ${name} {
     }
 
 </#list>
+<#list fields as field><#if field.wither>
+    public ${name} with${field.name?cap_first}(${field.type} ${field.name}) {
+        return new ${name}(<#list fields as argument><#if argument.name == field.name>${field.name}<#else>this.${argument.name}</#if><#if argument_has_next>, </#if></#list>);
+    }
+
+</#if></#list>
     @Override
     public boolean equals(Object o) {
         if (this == o) {

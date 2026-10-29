@@ -15,6 +15,7 @@ A NetBeans module that adds a **Value Class** file template to the **New** subme
   - Getters
   - `equals()` and `hashCode()`
   - `toString()`
+  - Optional `withX(...)` wither methods, selectable per field or with the **Make all fields withable** master checkbox
 - Automatic import resolution using the NetBeans Java Source API (`ClasspathInfo` / `ClassIndex`)
   - Handles common JDK types such as `List`, `Map`, `LocalDate`, and `BigDecimal`
   - Handles nested types such as `Map.Entry`
@@ -59,7 +60,8 @@ In a Java project:
 2. Choose **New → Value Class**
 3. Enter the class name and package
 4. Add the fields (for example, `String` / `name` and `int` / `age`)
-5. Click **Finish**
+5. Check **With** for fields that should get a `withX(...)` method, or check **Make all fields withable**
+6. Click **Finish**
 
 ## Notes
 

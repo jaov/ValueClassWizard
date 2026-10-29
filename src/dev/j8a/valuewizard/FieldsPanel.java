@@ -4,13 +4,16 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.lang.model.SourceVersion;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -29,6 +32,7 @@ final class FieldsPanel extends JPanel {
     private final ChangeSupport changeSupport = new ChangeSupport(this);
     private final FieldsTableModel model = new FieldsTableModel();
     private final JTable table;
+    private final JCheckBox allWithableCheckBox;
     private boolean updating;
 
     FieldsPanel() {
@@ -38,15 +42,25 @@ final class FieldsPanel extends JPanel {
         JLabel hint = new JLabel("<html><body style=\"width: 420px\">"
                 + NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.hint")
                 + "</body></html>");
-        add(hint, BorderLayout.NORTH);
+
+        allWithableCheckBox = new JCheckBox(
+                NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.allWithable"));
+        allWithableCheckBox.setToolTipText(
+                NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.allWithable.tooltip"));
+
+        JPanel header = new JPanel(new BorderLayout(0, 6));
+        header.add(hint, BorderLayout.NORTH);
+        header.add(allWithableCheckBox, BorderLayout.SOUTH);
+        add(header, BorderLayout.NORTH);
 
         table = new JTable(model);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setFillsViewportHeight(true);
         table.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         table.getTableHeader().setReorderingAllowed(false);
-        table.getColumnModel().getColumn(0).setPreferredWidth(240);
-        table.getColumnModel().getColumn(1).setPreferredWidth(170);
+        table.getColumnModel().getColumn(0).setPreferredWidth(220);
+        table.getColumnModel().getColumn(1).setPreferredWidth(150);
+        table.getColumnModel().getColumn(2).setPreferredWidth(60);
         table.setPreferredScrollableViewportSize(new Dimension(430, 170));
         add(new JScrollPane(table), BorderLayout.CENTER);
 
@@ -61,14 +75,30 @@ final class FieldsPanel extends JPanel {
         buttons.add(removeButton);
         add(buttons, BorderLayout.SOUTH);
 
+        allWithableCheckBox.addItemListener(e -> {
+            if (updating) {
+                return;
+            }
+            updating = true;
+            try {
+                model.setWitherAll(allWithableCheckBox.isSelected());
+            } finally {
+                updating = false;
+            }
+            updateAllWithableCheckBox();
+            changeSupport.fireChange();
+        });
+
         model.addTableModelListener(e -> {
             if (!updating) {
+                updateAllWithableCheckBox();
                 changeSupport.fireChange();
             }
         });
 
         model.addRow(new FieldSpec());
         table.setRowSelectionInterval(0, 0);
+        updateAllWithableCheckBox();
     }
 
     void addChangeListener(ChangeListener listener) {
@@ -89,7 +119,7 @@ final class FieldsPanel extends JPanel {
             if (field.isEmpty()) {
                 continue;
             }
-            result.add(new FieldSpec(field.getType().trim(), field.getName().trim()));
+            result.add(new FieldSpec(field.getType().trim(), field.getName().trim(), field.isWither()));
         }
         return result;
     }
@@ -117,6 +147,25 @@ final class FieldsPanel extends JPanel {
             updating = false;
         }
         table.setRowSelectionInterval(0, 0);
+        updateAllWithableCheckBox();
+    }
+
+    private void updateAllWithableCheckBox() {
+        boolean all = !model.getFields().isEmpty();
+        for (FieldSpec field : model.getFields()) {
+            if (!field.isWither()) {
+                all = false;
+                break;
+            }
+        }
+
+        boolean previous = updating;
+        updating = true;
+        try {
+            allWithableCheckBox.setSelected(all);
+        } finally {
+            updating = previous;
+        }
     }
 
     /**
@@ -126,6 +175,8 @@ final class FieldsPanel extends JPanel {
     String getValidationError() {
         boolean any = false;
         Set<String> names = new HashSet<>();
+        Map<String, String> getterNames = new HashMap<>();
+        Map<String, String> witherNames = new HashMap<>();
         for (FieldSpec field : model.getFields()) {
             String type = field.getType().trim();
             String name = field.getName().trim();
@@ -151,6 +202,20 @@ final class FieldsPanel extends JPanel {
             if (!names.add(name)) {
                 return NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.error.duplicate", name);
             }
+
+            String suffix = upperFirst(name);
+            String previous = getterNames.put("get" + suffix, name);
+            if (previous != null) {
+                return NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.error.duplicateMethod",
+                        previous, name);
+            }
+            if (field.isWither()) {
+                previous = witherNames.put("with" + suffix, name);
+                if (previous != null) {
+                    return NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.error.duplicateMethod",
+                            previous, name);
+                }
+            }
         }
 
         if (!any) {
@@ -160,7 +225,7 @@ final class FieldsPanel extends JPanel {
     }
 
     private void addRow() {
-        model.addRow(new FieldSpec());
+        model.addRow(new FieldSpec("", "", allWithableCheckBox.isSelected()));
         int row = model.getRowCount() - 1;
         table.setRowSelectionInterval(row, row);
         table.editCellAt(row, 0);
@@ -173,10 +238,17 @@ final class FieldsPanel extends JPanel {
             model.removeRow(row);
         }
         if (model.getRowCount() == 0) {
-            model.addRow(new FieldSpec());
+            model.addRow(new FieldSpec("", "", allWithableCheckBox.isSelected()));
         }
         int newRow = Math.min(Math.max(row, 0), model.getRowCount() - 1);
         table.setRowSelectionInterval(newRow, newRow);
+    }
+
+    private static String upperFirst(String value) {
+        if (value.isEmpty()) {
+            return value;
+        }
+        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
     private static final class FieldsTableModel extends AbstractTableModel {
@@ -184,7 +256,8 @@ final class FieldsPanel extends JPanel {
         private final List<FieldSpec> rows = new ArrayList<>();
         private final String[] columns = {
             NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.column.type"),
-            NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.column.name")
+            NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.column.name"),
+            NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.column.with")
         };
 
         List<FieldSpec> getFields() {
@@ -196,7 +269,7 @@ final class FieldsPanel extends JPanel {
             if (fields != null) {
                 for (FieldSpec field : fields) {
                     if (field != null) {
-                        rows.add(new FieldSpec(field.getType(), field.getName()));
+                        rows.add(new FieldSpec(field.getType(), field.getName(), field.isWither()));
                     }
                 }
             }
@@ -206,6 +279,16 @@ final class FieldsPanel extends JPanel {
         void addRow(FieldSpec field) {
             rows.add(field);
             fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
+        }
+
+        void setWitherAll(boolean wither) {
+            if (rows.isEmpty()) {
+                return;
+            }
+            for (FieldSpec field : rows) {
+                field.setWither(wither);
+            }
+            fireTableRowsUpdated(0, rows.size() - 1);
         }
 
         void removeRow(int row) {
@@ -233,7 +316,7 @@ final class FieldsPanel extends JPanel {
 
         @Override
         public Class<?> getColumnClass(int columnIndex) {
-            return String.class;
+            return columnIndex == 2 ? Boolean.class : String.class;
         }
 
         @Override
@@ -244,17 +327,25 @@ final class FieldsPanel extends JPanel {
         @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             FieldSpec field = rows.get(rowIndex);
-            return columnIndex == 0 ? field.getType() : field.getName();
+            switch (columnIndex) {
+                case 0:
+                    return field.getType();
+                case 1:
+                    return field.getName();
+                default:
+                    return field.isWither();
+            }
         }
 
         @Override
         public void setValueAt(Object value, int rowIndex, int columnIndex) {
             FieldSpec field = rows.get(rowIndex);
-            String text = value == null ? "" : value.toString();
             if (columnIndex == 0) {
-                field.setType(text);
+                field.setType(value == null ? "" : value.toString());
+            } else if (columnIndex == 1) {
+                field.setName(value == null ? "" : value.toString());
             } else {
-                field.setName(text);
+                field.setWither(Boolean.TRUE.equals(value));
             }
             fireTableCellUpdated(rowIndex, columnIndex);
         }

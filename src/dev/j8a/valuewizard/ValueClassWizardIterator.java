@@ -142,12 +142,13 @@ public final class ValueClassWizardIterator
      * Converts the field beans to plain maps so the FreeMarker engine does not
      * need reflective access to this module's classes.
      */
-    private static List<Map<String, String>> toTemplateFields(List<FieldSpec> fields) {
-        List<Map<String, String>> result = new ArrayList<>(fields.size());
+    private static List<Map<String, Object>> toTemplateFields(List<FieldSpec> fields) {
+        List<Map<String, Object>> result = new ArrayList<>(fields.size());
         for (FieldSpec field : fields) {
-            Map<String, String> map = new HashMap<>();
+            Map<String, Object> map = new HashMap<>();
             map.put("type", field.getType());
             map.put("name", field.getName());
+            map.put("wither", field.isWither());
             result.add(map);
         }
         return result;
