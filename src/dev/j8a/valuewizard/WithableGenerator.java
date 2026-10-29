@@ -2,6 +2,7 @@ package dev.j8a.valuewizard;
 
 import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
@@ -13,6 +14,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
@@ -44,6 +47,8 @@ import org.openide.util.NbBundle;
  */
 public final class WithableGenerator implements CodeGenerator {
 
+    private static final Logger LOG = Logger.getLogger(WithableGenerator.class.getName());
+
     private final JTextComponent component;
     private final ElementHandle<TypeElement> classHandle;
     private final List<WithableField> fields;
@@ -64,7 +69,9 @@ public final class WithableGenerator implements CodeGenerator {
 
     @Override
     public void invoke() {
+        LOG.fine("Withable action invoked");
         if (error != null) {
+            LOG.fine("Withable action: " + error);
             DialogDisplayer.getDefault().notifyLater(new NotifyDescriptor.Message(
                     error, NotifyDescriptor.WARNING_MESSAGE));
             return;
@@ -84,6 +91,7 @@ public final class WithableGenerator implements CodeGenerator {
         }
 
         if (!generate(component, classHandle, selected)) {
+            LOG.fine("Withable action: generation failed for " + selected);
             DialogDisplayer.getDefault().notifyLater(new NotifyDescriptor.Message(
                     NbBundle.getMessage(WithableGenerator.class, "WithableGenerator.error.failed"),
                     NotifyDescriptor.WARNING_MESSAGE));
@@ -294,45 +302,73 @@ public final class WithableGenerator implements CodeGenerator {
             JTextComponent component = context.lookup(JTextComponent.class);
             CompilationController controller = context.lookup(CompilationController.class);
             TreePath path = context.lookup(TreePath.class);
-            if (component == null || controller == null || path == null) {
+            if (component == null || controller == null) {
+                LOG.fine("Withable factory: missing editor context (component="
+                        + (component != null) + ", controller=" + (controller != null) + ")");
                 return Collections.emptyList();
             }
 
             try {
+                if (path == null) {
+                    controller.toPhase(JavaSource.Phase.PARSED);
+                    path = controller.getTreeUtilities().pathFor(component.getCaretPosition());
+                    LOG.fine("Withable factory: recomputed caret path=" + (path != null));
+                }
+                if (path == null) {
+                    path = firstClassPath(controller);
+                    LOG.fine("Withable factory: using first class path=" + (path != null));
+                }
+                if (path == null) {
+                    LOG.fine("Withable factory: no class path available");
+                    return Collections.emptyList();
+                }
+
                 TreePath classPath = controller.getTreeUtilities().getPathElementOfKind(
                         EnumSet.of(Tree.Kind.CLASS), path);
                 if (classPath == null) {
-                    return Collections.emptyList();
+                    LOG.fine("Withable factory: caret is not inside a class");
+                    return error(component, "WithableGenerator.error.notInClass");
                 }
 
                 controller.toPhase(JavaSource.Phase.ELEMENTS_RESOLVED);
                 Element element = controller.getTrees().getElement(classPath);
                 if (!(element instanceof TypeElement)) {
-                    return Collections.emptyList();
+                    LOG.fine("Withable factory: caret element is not a type");
+                    return error(component, "WithableGenerator.error.notClass");
                 }
 
                 TypeElement type = (TypeElement) element;
+                LOG.fine("Withable factory: class=" + type.getQualifiedName()
+                        + ", kind=" + type.getKind()
+                        + ", nesting=" + type.getNestingKind());
                 if (type.getNestingKind() == NestingKind.ANONYMOUS) {
-                    return Collections.emptyList();
+                    LOG.fine("Withable factory: anonymous class ignored");
+                    return error(component, type, "WithableGenerator.error.anonymous");
                 }
                 if (type.getKind() == ElementKind.RECORD) {
+                    LOG.fine("Withable factory: record ignored");
                     return error(component, type, "WithableGenerator.error.record");
                 }
                 if (type.getKind() != ElementKind.CLASS) {
-                    return Collections.emptyList();
+                    LOG.fine("Withable factory: non-class type ignored");
+                    return error(component, type, "WithableGenerator.error.notClass");
                 }
 
                 List<VariableElement> declaredFields = collectFieldElements(type);
+                LOG.fine("Withable factory: instance fields=" + declaredFields.size());
                 if (declaredFields.isEmpty()) {
-                    return Collections.emptyList();
+                    return error(component, type, "WithableGenerator.error.noFields");
                 }
                 if (!type.getTypeParameters().isEmpty()) {
+                    LOG.fine("Withable factory: generic class ignored");
                     return error(component, type, "WithableGenerator.error.generic");
                 }
                 if (type.getModifiers().contains(Modifier.ABSTRACT)) {
+                    LOG.fine("Withable factory: abstract class ignored");
                     return error(component, type, "WithableGenerator.error.abstract");
                 }
                 if (!hasMatchingConstructor(type, declaredFields, controller.getTypes())) {
+                    LOG.fine("Withable factory: no matching all-arguments constructor");
                     return error(component, type, "WithableGenerator.error.noConstructor");
                 }
 
@@ -343,26 +379,55 @@ public final class WithableGenerator implements CodeGenerator {
                         eligible.add(new WithableField(name, field.asType().toString()));
                     }
                 }
+                LOG.fine("Withable factory: eligible fields=" + eligible.size());
                 if (eligible.isEmpty()) {
                     return error(component, type, "WithableGenerator.error.none");
                 }
 
                 ElementHandle<TypeElement> classHandle = ElementHandle.create(type);
+                LOG.fine("Withable factory: offering action for " + type.getQualifiedName());
                 return Collections.singletonList(
                         new WithableGenerator(component, classHandle, eligible, null));
             } catch (IOException ex) {
-                Exceptions.printStackTrace(ex);
-                return Collections.emptyList();
+                LOG.log(Level.FINE, "Withable factory: analysis failed", ex);
+                return error(component, "WithableGenerator.error.analysisFailed");
             } catch (RuntimeException ex) {
-                Exceptions.printStackTrace(ex);
-                return Collections.emptyList();
+                LOG.log(Level.FINE, "Withable factory: unexpected failure", ex);
+                return error(component, "WithableGenerator.error.analysisFailed");
             }
+        }
+
+        private static TreePath firstClassPath(CompilationController controller) {
+            CompilationUnitTree unit = controller.getCompilationUnit();
+            if (unit == null) {
+                return null;
+            }
+            for (Tree declaration : unit.getTypeDecls()) {
+                if (declaration instanceof ClassTree) {
+                    return TreePath.getPath(unit, declaration);
+                }
+            }
+            return null;
+        }
+
+        private static List<? extends CodeGenerator> error(
+                JTextComponent component, String key) {
+            return Collections.singletonList(new WithableGenerator(
+                    component, null, Collections.emptyList(),
+                    NbBundle.getMessage(WithableGenerator.class, key)));
         }
 
         private static List<? extends CodeGenerator> error(
                 JTextComponent component, TypeElement type, String key) {
+            ElementHandle<TypeElement> handle;
+            try {
+                handle = ElementHandle.create(type);
+            } catch (RuntimeException ex) {
+                LOG.log(Level.FINE, "Withable factory: cannot create class handle", ex);
+                handle = null;
+            }
             return Collections.singletonList(new WithableGenerator(
-                    component, ElementHandle.create(type), Collections.emptyList(),
+                    component, handle, Collections.emptyList(),
                     NbBundle.getMessage(WithableGenerator.class, key)));
         }
     }
