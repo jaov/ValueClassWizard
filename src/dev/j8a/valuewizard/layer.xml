@@ -15,4 +15,16 @@
             </file>
         </folder>
     </folder>
+    <folder name="Editors">
+        <folder name="text">
+            <folder name="x-java">
+                <folder name="CodeGenerators">
+                    <file name="dev-j8a-valuewizard-WithableGenerator$Factory.instance">
+                        <attr name="position" intvalue="360"/>
+                        <attr name="instanceOf" stringvalue="org.netbeans.spi.editor.codegen.CodeGenerator$Factory"/>
+                    </file>
+                </folder>
+            </folder>
+        </folder>
+    </folder>
 </filesystem>

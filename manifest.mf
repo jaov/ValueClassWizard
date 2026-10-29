@@ -4,5 +4,5 @@ OpenIDE-Module: dev.j8a.valuewizard
 OpenIDE-Module-Layer: dev/j8a/valuewizard/layer.xml
 OpenIDE-Module-Localizing-Bundle: dev/j8a/valuewizard/Bundle.properties
 OpenIDE-Module-Needs: javax.script.ScriptEngine.freemarker
-OpenIDE-Module-Specification-Version: 1.1
+OpenIDE-Module-Specification-Version: 1.2
 

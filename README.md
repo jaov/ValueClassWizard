@@ -16,6 +16,7 @@ A NetBeans module that adds a **Value Class** file template to the **New** subme
   - `equals()` and `hashCode()`
   - `toString()`
   - Optional `withX(...)` wither methods, selectable per field or with the **Make all fields withable** master checkbox
+- **Insert Code → Withable…** action for adding `withX(...)` methods to an existing class
 - Automatic import resolution using the NetBeans Java Source API (`ClasspathInfo` / `ClassIndex`)
   - Handles common JDK types such as `List`, `Map`, `LocalDate`, and `BigDecimal`
   - Handles nested types such as `Map.Entry`
@@ -63,8 +64,19 @@ In a Java project:
 5. Check **With** for fields that should get a `withX(...)` method, or check **Make all fields withable**
 6. Click **Finish**
 
+To add withers to an existing class:
+
+1. Open the class in the Java editor
+2. Press **Alt+Insert** (or choose **Source → Insert Code**)
+3. Choose **Withable…**
+4. Select the fields
+5. Click **OK**
+
+The action is offered for non-generic classes that have a matching all-arguments constructor. Fields that already have a `withX(...)` method are skipped.
+
 ## Notes
 
 - Types are inserted exactly as entered. Non-`java.lang` types are imported automatically when they can be resolved unambiguously.
 - If a type cannot be resolved, the generated file keeps the name as entered and the wizard shows a warning. Use NetBeans' **Fix Imports** in that case.
 - Array fields use reference-based equality through `Objects.equals`, which is the standard behavior for a simple value-class generator.
+- The Insert Code action requires Java 17+ because the module is built against the NetBeans 30 editor and Java Source APIs.
