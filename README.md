@@ -16,7 +16,9 @@ A NetBeans module that adds a **Value Class** file template to the **New** subme
   - `equals()` and `hashCode()`
   - `toString()`
   - Optional `withX(...)` wither methods, selectable per field or with the **Make all fields withable** master checkbox
+  - Optional staged `Builder` with a static `builder()` factory, `setX(...)` setters, and `build()`
 - **Insert Code → Withable…** action for adding `withX(...)` methods to an existing class
+- **Insert Code → Builder** action for adding a staged builder to an existing class
 - Automatic import resolution using the NetBeans Java Source API (`ClasspathInfo` / `ClassIndex`)
   - Handles common JDK types such as `List`, `Map`, `LocalDate`, and `BigDecimal`
   - Handles nested types such as `Map.Entry`
@@ -62,21 +64,26 @@ In a Java project:
 3. Enter the class name and package
 4. Add the fields (for example, `String` / `name` and `int` / `age`)
 5. Check **With** for fields that should get a `withX(...)` method, or check **Make all fields withable**
-6. Click **Finish**
+6. Check **Generate builder** to add a staged builder, if wanted
+7. Click **Finish**
 
-To add withers to an existing class:
+To add withers or a builder to an existing class:
 
 1. Open the class in the Java editor
 2. Press **Alt+Insert** (or choose **Source → Insert Code**)
-3. Choose **Withable…**
-4. Select the fields
-5. Click **OK**
+3. Choose **Withable…** to add `withX(...)` methods, or **Builder** to add a staged builder
+4. For **Withable…**, select the fields and click **OK**
 
-The action is offered for classes with fields. It explains why it cannot generate anything when the class is generic, abstract, a record, has no matching all-arguments constructor, or already has withers for every field. Fields that already have a `withX(...)` method are skipped.
+The Withable action is offered for classes with fields. It explains why it cannot generate anything when the class is generic, abstract, a record, has no suitable all-arguments constructor, or already has withers for every field. Fields that already have a `withX(...)` method are skipped.
+
+The Builder action requires a matching all-arguments constructor that does not throw checked exceptions, so `build()` can construct the value class. It explains why it cannot generate anything when the class is generic, abstract, a record, local, anonymous, has no fields, has no suitable all-arguments constructor, already has a `Builder` or `builder()` method, or would produce conflicting generated type names.
 
 ## Notes
 
 - Types are inserted exactly as entered. Non-`java.lang` types are imported automatically when they can be resolved unambiguously.
 - If a type cannot be resolved, the generated file keeps the name as entered and the wizard shows a warning. Use NetBeans' **Fix Imports** in that case.
 - Array fields use reference-based equality through `Objects.equals`, which is the standard behavior for a simple value-class generator.
-- The Insert Code action requires Java 17+ because the module is built against the NetBeans 30 editor and Java Source APIs.
+- The staged builder uses `HasX` / `CanBuild` interfaces so `build()` is only callable after every setter has been called. The setters must be called in field order.
+- Builder setters are named `setX(...)`, while the value class's copy-with-one-change methods are named `withX(...)`. They intentionally have different semantics: `withX(...)` returns a new instance, while `setX(...)` mutates the builder.
+- The Insert Code actions use an all-arguments constructor that does not throw checked exceptions, so the generated code compiles without adding `throws` clauses.
+- The Insert Code actions require Java 17+ because the module is built against the NetBeans 30 editor and Java Source APIs.

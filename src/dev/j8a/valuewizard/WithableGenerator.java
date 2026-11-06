@@ -2,7 +2,6 @@ package dev.j8a.valuewizard;
 
 import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
@@ -23,9 +22,6 @@ import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.util.ElementFilter;
-import javax.lang.model.util.Types;
 import javax.swing.JOptionPane;
 import javax.swing.text.JTextComponent;
 import org.netbeans.api.java.source.CompilationController;
@@ -34,7 +30,6 @@ import org.netbeans.api.java.source.GeneratorUtilities;
 import org.netbeans.api.java.source.JavaSource;
 import org.netbeans.api.java.source.ModificationResult;
 import org.netbeans.api.java.source.TreeMaker;
-import org.netbeans.api.java.source.WorkingCopy;
 import org.netbeans.spi.editor.codegen.CodeGenerator;
 import org.openide.DialogDisplayer;
 import org.openide.NotifyDescriptor;
@@ -120,15 +115,14 @@ public final class WithableGenerator implements CodeGenerator {
                 }
                 ClassTree classTree = (ClassTree) typePath.getLeaf();
 
-                List<VariableElement> currentFields = collectFieldElements(type);
-                int[] mapping = null;
-                for (ExecutableElement constructor
-                        : ElementFilter.constructorsIn(type.getEnclosedElements())) {
-                    mapping = findConstructorMapping(constructor, currentFields, wc.getTypes());
-                    if (mapping != null) {
-                        break;
-                    }
+                List<VariableElement> currentFields = CodeGeneratorSupport.collectInstanceFields(type);
+                ExecutableElement constructor = CodeGeneratorSupport.findSuitableConstructor(
+                        type, currentFields, wc.getTypes(), wc.getElements());
+                if (constructor == null) {
+                    return;
                 }
+                int[] mapping = CodeGeneratorSupport.findConstructorMapping(
+                        constructor, currentFields, wc.getTypes());
                 if (mapping == null) {
                     return;
                 }
@@ -162,7 +156,8 @@ public final class WithableGenerator implements CodeGenerator {
     private static MethodTree createWither(TreeMaker make, TypeElement type,
             List<VariableElement> fields, int[] constructorMapping, int targetIndex) {
         VariableElement targetField = fields.get(targetIndex);
-        String methodName = "with" + upperFirst(targetField.getSimpleName().toString());
+        String methodName = "with" + CodeGeneratorSupport.upperFirst(
+                targetField.getSimpleName().toString());
 
         Tree returnType = make.Identifier(type.getSimpleName());
         VariableTree parameter = make.Variable(
@@ -193,86 +188,9 @@ public final class WithableGenerator implements CodeGenerator {
                 body, null);
     }
 
-    private static List<VariableElement> collectFieldElements(TypeElement type) {
-        List<VariableElement> result = new ArrayList<>();
-        for (VariableElement field : ElementFilter.fieldsIn(type.getEnclosedElements())) {
-            if (field.getModifiers().contains(Modifier.STATIC)) {
-                continue;
-            }
-            String name = field.getSimpleName().toString();
-            if (name.startsWith("this$") || name.startsWith("val$")) {
-                continue;
-            }
-            if (field.asType().getKind() == TypeKind.ERROR) {
-                continue;
-            }
-            result.add(field);
-        }
-        return result;
-    }
-
-    private static boolean hasMatchingConstructor(TypeElement type,
-            List<VariableElement> fields, Types types) {
-        for (ExecutableElement constructor
-                : ElementFilter.constructorsIn(type.getEnclosedElements())) {
-            if (findConstructorMapping(constructor, fields, types) != null) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static int[] findConstructorMapping(ExecutableElement constructor,
-            List<VariableElement> fields, Types types) {
-        List<? extends VariableElement> parameters = constructor.getParameters();
-        if (parameters.size() != fields.size()) {
-            return null;
-        }
-
-        boolean[] used = new boolean[fields.size()];
-        int[] mapping = new int[parameters.size()];
-        for (int i = 0; i < parameters.size(); i++) {
-            int match = findField(fields, used, parameters.get(i), types);
-            if (match < 0) {
-                return null;
-            }
-            used[match] = true;
-            mapping[i] = match;
-        }
-        return mapping;
-    }
-
-    private static int findField(List<VariableElement> fields, boolean[] used,
-            VariableElement parameter, Types types) {
-        for (int i = 0; i < fields.size(); i++) {
-            if (!used[i]
-                    && fields.get(i).getSimpleName().contentEquals(parameter.getSimpleName())
-                    && types.isSameType(fields.get(i).asType(), parameter.asType())) {
-                return i;
-            }
-        }
-
-        int candidate = -1;
-        for (int i = 0; i < fields.size(); i++) {
-            if (!used[i] && types.isSameType(fields.get(i).asType(), parameter.asType())) {
-                if (candidate >= 0) {
-                    return -1;
-                }
-                candidate = i;
-            }
-        }
-        return candidate;
-    }
-
     private static boolean hasWither(TypeElement type, String fieldName) {
-        String methodName = "with" + upperFirst(fieldName);
-        for (ExecutableElement method : ElementFilter.methodsIn(type.getEnclosedElements())) {
-            if (method.getSimpleName().contentEquals(methodName)
-                    && method.getParameters().size() == 1) {
-                return true;
-            }
-        }
-        return false;
+        return CodeGeneratorSupport.hasMethod(type,
+                "with" + CodeGeneratorSupport.upperFirst(fieldName), 1);
     }
 
     private static int indexOfField(List<VariableElement> fields, String name) {
@@ -282,13 +200,6 @@ public final class WithableGenerator implements CodeGenerator {
             }
         }
         return -1;
-    }
-
-    private static String upperFirst(String value) {
-        if (value == null || value.isEmpty()) {
-            return "";
-        }
-        return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
     /**
@@ -315,7 +226,7 @@ public final class WithableGenerator implements CodeGenerator {
                     LOG.fine("Withable factory: recomputed caret path=" + (path != null));
                 }
                 if (path == null) {
-                    path = firstClassPath(controller);
+                    path = CodeGeneratorSupport.firstClassPath(controller);
                     LOG.fine("Withable factory: using first class path=" + (path != null));
                 }
                 if (path == null) {
@@ -323,8 +234,7 @@ public final class WithableGenerator implements CodeGenerator {
                     return Collections.emptyList();
                 }
 
-                TreePath classPath = controller.getTreeUtilities().getPathElementOfKind(
-                        EnumSet.of(Tree.Kind.CLASS), path);
+                TreePath classPath = CodeGeneratorSupport.enclosingTypePath(controller, path);
                 if (classPath == null) {
                     LOG.fine("Withable factory: caret is not inside a class");
                     return error(component, "WithableGenerator.error.notInClass");
@@ -354,7 +264,7 @@ public final class WithableGenerator implements CodeGenerator {
                     return error(component, type, "WithableGenerator.error.notClass");
                 }
 
-                List<VariableElement> declaredFields = collectFieldElements(type);
+                List<VariableElement> declaredFields = CodeGeneratorSupport.collectInstanceFields(type);
                 LOG.fine("Withable factory: instance fields=" + declaredFields.size());
                 if (declaredFields.isEmpty()) {
                     return error(component, type, "WithableGenerator.error.noFields");
@@ -367,8 +277,10 @@ public final class WithableGenerator implements CodeGenerator {
                     LOG.fine("Withable factory: abstract class ignored");
                     return error(component, type, "WithableGenerator.error.abstract");
                 }
-                if (!hasMatchingConstructor(type, declaredFields, controller.getTypes())) {
-                    LOG.fine("Withable factory: no matching all-arguments constructor");
+                if (CodeGeneratorSupport.findSuitableConstructor(
+                        type, declaredFields, controller.getTypes(),
+                        controller.getElements()) == null) {
+                    LOG.fine("Withable factory: no suitable all-arguments constructor");
                     return error(component, type, "WithableGenerator.error.noConstructor");
                 }
 
@@ -395,19 +307,6 @@ public final class WithableGenerator implements CodeGenerator {
                 LOG.log(Level.FINE, "Withable factory: unexpected failure", ex);
                 return error(component, "WithableGenerator.error.analysisFailed");
             }
-        }
-
-        private static TreePath firstClassPath(CompilationController controller) {
-            CompilationUnitTree unit = controller.getCompilationUnit();
-            if (unit == null) {
-                return null;
-            }
-            for (Tree declaration : unit.getTypeDecls()) {
-                if (declaration instanceof ClassTree) {
-                    return TreePath.getPath(unit, declaration);
-                }
-            }
-            return null;
         }
 
         private static List<? extends CodeGenerator> error(

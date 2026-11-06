@@ -12,6 +12,7 @@ import java.util.Set;
 import javax.lang.model.SourceVersion;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
@@ -33,6 +34,7 @@ final class FieldsPanel extends JPanel {
     private final FieldsTableModel model = new FieldsTableModel();
     private final JTable table;
     private final JCheckBox allWithableCheckBox;
+    private final JCheckBox builderCheckBox;
     private boolean updating;
 
     FieldsPanel() {
@@ -48,9 +50,20 @@ final class FieldsPanel extends JPanel {
         allWithableCheckBox.setToolTipText(
                 NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.allWithable.tooltip"));
 
+        builderCheckBox = new JCheckBox(
+                NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.builder"));
+        builderCheckBox.setToolTipText(
+                NbBundle.getMessage(FieldsPanel.class, "FieldsPanel.builder.tooltip"));
+
+        JPanel options = new JPanel();
+        options.setLayout(new BoxLayout(options, BoxLayout.Y_AXIS));
+        options.add(allWithableCheckBox);
+        options.add(Box.createVerticalStrut(4));
+        options.add(builderCheckBox);
+
         JPanel header = new JPanel(new BorderLayout(0, 6));
         header.add(hint, BorderLayout.NORTH);
-        header.add(allWithableCheckBox, BorderLayout.SOUTH);
+        header.add(options, BorderLayout.SOUTH);
         add(header, BorderLayout.NORTH);
 
         table = new JTable(model);
@@ -96,6 +109,12 @@ final class FieldsPanel extends JPanel {
             }
         });
 
+        builderCheckBox.addItemListener(e -> {
+            if (!updating) {
+                changeSupport.fireChange();
+            }
+        });
+
         model.addRow(new FieldSpec());
         table.setRowSelectionInterval(0, 0);
         updateAllWithableCheckBox();
@@ -107,6 +126,47 @@ final class FieldsPanel extends JPanel {
 
     void removeChangeListener(ChangeListener listener) {
         changeSupport.removeChangeListener(listener);
+    }
+
+    boolean isBuilder() {
+        return builderCheckBox.isSelected();
+    }
+
+    void setBuilder(boolean builder) {
+        boolean previous = updating;
+        updating = true;
+        try {
+            builderCheckBox.setSelected(builder);
+        } finally {
+            updating = previous;
+        }
+    }
+
+    /**
+     * Returns null when the class name does not conflict with a type generated
+     * by the staged builder, otherwise a localized error message.
+     */
+    String getBuilderNameConflict(String className) {
+        String simple = simpleClassName(className);
+        if (simple.isEmpty()) {
+            return null;
+        }
+        if (CodeGeneratorSupport.BUILDER_NAME.equals(simple)
+                || CodeGeneratorSupport.CAN_BUILD_NAME.equals(simple)) {
+            return NbBundle.getMessage(FieldsPanel.class,
+                    "FieldsPanel.error.builderTypeConflict", simple);
+        }
+        for (FieldSpec field : model.getFields()) {
+            String name = field.getName().trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            if (simple.equals(CodeGeneratorSupport.STAGE_PREFIX + upperFirst(name))) {
+                return NbBundle.getMessage(FieldsPanel.class,
+                        "FieldsPanel.error.builderTypeConflict", simple);
+            }
+        }
+        return null;
     }
 
     /**
@@ -242,6 +302,18 @@ final class FieldsPanel extends JPanel {
         }
         int newRow = Math.min(Math.max(row, 0), model.getRowCount() - 1);
         table.setRowSelectionInterval(newRow, newRow);
+    }
+
+    private static String simpleClassName(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        String result = name;
+        if (result.endsWith(".java")) {
+            result = result.substring(0, result.length() - 5);
+        }
+        int dot = result.lastIndexOf('.');
+        return dot < 0 ? result : result.substring(dot + 1);
     }
 
     private static String upperFirst(String value) {

@@ -116,6 +116,8 @@ public final class ValueClassWizardIterator
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("fields", toTemplateFields(fields));
         parameters.put("imports", resolution.getImports());
+        parameters.put("builder", Boolean.TRUE.equals(
+                wizard.getProperty(FieldsWizardPanel.PROP_BUILDER)));
 
         DataObject created = templateObject.createFromTemplate(folder, targetName, parameters);
         notifyUnresolved(resolution.getUnresolved());

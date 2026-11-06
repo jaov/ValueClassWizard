@@ -42,6 +42,45 @@ public final class ${name} {
     }
 
 </#if></#list>
+<#if (builder?? && builder) && fields?has_content>
+    public static Has${fields[0].name?cap_first} builder() {
+        return new Builder();
+    }
+
+<#list fields as field>
+    public interface Has${field.name?cap_first} {
+        <#if field_has_next>Has${fields[field_index + 1].name?cap_first}<#else>CanBuild</#if> set${field.name?cap_first}(${field.type} ${field.name});
+    }
+
+</#list>
+    public interface CanBuild {
+        ${name} build();
+    }
+
+    private static final class Builder implements <#list fields as field>Has${field.name?cap_first}<#if field_has_next>, </#if></#list>, CanBuild {
+
+        private Builder() {
+        }
+
+<#list fields as field>
+        private ${field.type} ${field.name};
+</#list>
+
+<#list fields as field>
+        @Override
+        public <#if field_has_next>Has${fields[field_index + 1].name?cap_first}<#else>CanBuild</#if> set${field.name?cap_first}(${field.type} ${field.name}) {
+            this.${field.name} = ${field.name};
+            return this;
+        }
+
+</#list>
+        @Override
+        public ${name} build() {
+            return new ${name}(<#list fields as field>this.${field.name}<#if field_has_next>, </#if></#list>);
+        }
+    }
+
+</#if>
     @Override
     public boolean equals(Object o) {
         if (this == o) {
