@@ -19,6 +19,7 @@ A NetBeans module that adds a **Value Class** file template to the **New** subme
   - Optional staged `Builder` with a static `builder()` factory, `setX(...)` setters, and `build()`
 - **Insert Code → Withable…** action for adding `withX(...)` methods to an existing class
 - **Insert Code → Builder** action for adding a staged builder to an existing class
+- **Alt+Enter** hint that offers to regenerate the staged builder when the class fields change
 - Automatic import resolution using the NetBeans Java Source API (`ClasspathInfo` / `ClassIndex`)
   - Handles common JDK types such as `List`, `Map`, `LocalDate`, and `BigDecimal`
   - Handles nested types such as `Map.Entry`
@@ -28,7 +29,8 @@ A NetBeans module that adds a **Value Class** file template to the **New** subme
 ## Requirements
 
 - Apache NetBeans 30 (the module is built against it)
-- JDK 17 or newer (required by NetBeans)
+- The module and generated code target **Java 17**
+- The NetBeans 30 build/test harness itself requires Java 21+; NetBeans ships its own JDK
 
 ## Build
 
@@ -43,6 +45,26 @@ The installable module is written to:
 ```text
 build/dev-j8a-valuewizard.nbm
 ```
+
+## Test
+
+The module and generated code stay on Java 17, but the NetBeans 30 build harness is compiled for Java 21+ and cannot run on JDK 17. The `JavaSource`/hint tests also need the JDK bundled with NetBeans 30 because `NoJavacHelper` checks `SourceVersion.RELEASE_26`.
+
+Run the full suite with the bundled JDK:
+
+```bash
+JAVA_HOME=/usr/lib/apache-netbeans/jdk ant -f build.xml clean test
+```
+
+If you run Ant with a newer JDK and want the tests to use the NetBeans-bundled JDK, set this in `nbproject/private/platform-private.properties` or `~/.netbeans/30/build.properties`:
+
+```properties
+test.nbjdk.home=/path/to/netbeans/jdk
+```
+
+Do not put it in `nbproject/project.properties`: the harness's `-jdk-init` target runs before `project.properties` is loaded, so the property would be too late.
+
+If your NetBeans installation does not bundle a JDK, point `test.nbjdk.home` at a JDK that has `SourceVersion.RELEASE_26`.
 
 ## Run
 
@@ -77,6 +99,16 @@ To add withers or a builder to an existing class:
 The Withable action is offered for classes with fields. It explains why it cannot generate anything when the class is generic, abstract, a record, has no suitable all-arguments constructor, or already has withers for every field. Fields that already have a `withX(...)` method are skipped.
 
 The Builder action requires a matching all-arguments constructor that does not throw checked exceptions, so `build()` can construct the value class. It explains why it cannot generate anything when the class is generic, abstract, a record, local, anonymous, has no fields, has no suitable all-arguments constructor, already has a `Builder` or `builder()` method, or would produce conflicting generated type names.
+
+## Regenerating the builder
+
+When a class already has the generated staged builder and its fields change, the editor offers an Alt+Enter hint on the nested `Builder` class:
+
+1. Update the class fields and its all-arguments constructor.
+2. Place the caret on the nested `Builder` declaration, or use the editor's lightbulb.
+3. Choose **Regenerate Builder**.
+
+The old generated `Builder`, stage interfaces, `CanBuild` interface, and `builder()` method are replaced with a fresh staged builder for the current fields. Regeneration replaces the generated builder, so any custom changes to it are lost. If there is no all-arguments constructor covering the current fields, the hint explains what is missing instead of offering the fix.
 
 ## Notes
 

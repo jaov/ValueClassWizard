@@ -37,4 +37,12 @@ public class BuilderRegistrationTest {
         assertTrue("Builder factory not found; registered: " + found,
                 found.contains("dev.j8a.valuewizard.BuilderGenerator$Factory"));
     }
+
+    @Test
+    public void builderHintIsRegistered() {
+        FileObject hint = FileUtil.getConfigFile(
+                "org-netbeans-modules-java-hints/code-hints/"
+                + "dev-j8a-valuewizard-BuilderHint.class");
+        assertNotNull("Builder hint layer entry is missing", hint);
+    }
 }

@@ -1,23 +1,11 @@
 package dev.j8a.valuewizard;
 
-import com.sun.source.tree.AnnotationTree;
-import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.ExpressionTree;
-import com.sun.source.tree.MethodTree;
-import com.sun.source.tree.ModifiersTree;
-import com.sun.source.tree.NewClassTree;
-import com.sun.source.tree.StatementTree;
 import com.sun.source.tree.Tree;
-import com.sun.source.tree.VariableTree;
 import com.sun.source.util.TreePath;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.lang.model.element.Element;
@@ -92,7 +80,15 @@ public final class BuilderGenerator implements CodeGenerator {
             if (source == null) {
                 return false;
             }
+            return addBuilder(source, classHandle);
+        } catch (Exception ex) {
+            Exceptions.printStackTrace(ex);
+            return false;
+        }
+    }
 
+    static boolean addBuilder(JavaSource source, ElementHandle<TypeElement> classHandle) {
+        try {
             boolean[] modified = new boolean[1];
             ModificationResult result = source.runModificationTask(wc -> {
                 wc.toPhase(JavaSource.Phase.RESOLVED);
@@ -114,7 +110,7 @@ public final class BuilderGenerator implements CodeGenerator {
                 }
 
                 List<VariableElement> fields = CodeGeneratorSupport.collectInstanceFields(type);
-                if (fields.isEmpty() || hasDuplicateSetter(fields)) {
+                if (fields.isEmpty() || BuilderAst.hasDuplicateSetter(fields)) {
                     return;
                 }
                 ExecutableElement constructor = CodeGeneratorSupport.findSuitableConstructor(
@@ -128,22 +124,13 @@ public final class BuilderGenerator implements CodeGenerator {
                     return;
                 }
 
-                List<String> stageNames = stageNames(fields);
+                List<String> stageNames = BuilderAst.stageNames(fields);
                 if (conflictsWithEnclosingOrExistingTypes(type, stageNames)) {
                     return;
                 }
 
                 TreeMaker make = wc.getTreeMaker();
-                List<Tree> members = new ArrayList<>();
-                members.add(createBuilderFactory(make, stageNames.get(0)));
-                for (int i = 0; i < fields.size(); i++) {
-                    String next = i + 1 < fields.size()
-                            ? stageNames.get(i + 1) : CAN_BUILD;
-                    members.add(createStageInterface(
-                            make, fields.get(i), stageNames.get(i), next));
-                }
-                members.add(createCanBuildInterface(make, type));
-                members.add(createBuilderClass(make, type, fields, mapping, stageNames));
+                List<Tree> members = BuilderAst.createMembers(make, type, fields, mapping);
 
                 ClassTree newClass = GeneratorUtilities.get(wc)
                         .insertClassMembers(classTree, members);
@@ -157,16 +144,6 @@ public final class BuilderGenerator implements CodeGenerator {
             Exceptions.printStackTrace(ex);
             return false;
         }
-    }
-
-    private static List<String> stageNames(List<VariableElement> fields) {
-        List<String> result = new ArrayList<>(fields.size());
-        for (VariableElement field : fields) {
-            result.add(CodeGeneratorSupport.STAGE_PREFIX
-                    + CodeGeneratorSupport.upperFirst(
-                            field.getSimpleName().toString()));
-        }
-        return result;
     }
 
     private static boolean conflictsWithEnclosingOrExistingTypes(
@@ -183,179 +160,6 @@ public final class BuilderGenerator implements CodeGenerator {
             }
         }
         return false;
-    }
-
-    private static boolean hasDuplicateSetter(List<VariableElement> fields) {
-        Set<String> names = new HashSet<>();
-        for (VariableElement field : fields) {
-            String name = "set" + CodeGeneratorSupport.upperFirst(
-                    field.getSimpleName().toString());
-            if (!names.add(name)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static MethodTree createBuilderFactory(TreeMaker make, String firstStage) {
-        NewClassTree newClass = make.NewClass(null, Collections.emptyList(),
-                make.Identifier(BUILDER), Collections.emptyList(), null);
-        BlockTree body = make.Block(
-                Collections.singletonList(make.Return(newClass)), false);
-        return make.Method(
-                make.Modifiers(EnumSet.of(Modifier.PUBLIC, Modifier.STATIC)),
-                "builder",
-                make.Identifier(firstStage),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                body, null);
-    }
-
-    private static ClassTree createStageInterface(TreeMaker make,
-            VariableElement field, String stageName, String nextStage) {
-        VariableTree parameter = make.Variable(
-                make.Modifiers(Collections.emptySet()),
-                field.getSimpleName(),
-                make.Type(field.asType()),
-                null);
-        MethodTree method = make.Method(
-                make.Modifiers(Collections.emptySet()),
-                "set" + CodeGeneratorSupport.upperFirst(field.getSimpleName().toString()),
-                make.Identifier(nextStage),
-                Collections.emptyList(),
-                Collections.singletonList(parameter),
-                Collections.emptyList(),
-                (BlockTree) null, null);
-        return make.Interface(
-                make.Modifiers(EnumSet.of(Modifier.PUBLIC)),
-                stageName,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.singletonList(method),
-                Collections.emptyList());
-    }
-
-    private static ClassTree createCanBuildInterface(TreeMaker make, TypeElement type) {
-        MethodTree method = make.Method(
-                make.Modifiers(Collections.emptySet()),
-                "build",
-                make.Identifier(type.getSimpleName()),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                (BlockTree) null, null);
-        return make.Interface(
-                make.Modifiers(EnumSet.of(Modifier.PUBLIC)),
-                CAN_BUILD,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.singletonList(method),
-                Collections.emptyList());
-    }
-
-    private static ClassTree createBuilderClass(TreeMaker make, TypeElement type,
-            List<VariableElement> fields, int[] constructorMapping,
-            List<String> stageNames) {
-        List<Tree> implementsList = new ArrayList<>(stageNames.size() + 1);
-        for (String stageName : stageNames) {
-            implementsList.add(make.Identifier(stageName));
-        }
-        implementsList.add(make.Identifier(CAN_BUILD));
-
-        List<Tree> members = new ArrayList<>();
-        members.add(createBuilderConstructor(make));
-        for (VariableElement field : fields) {
-            members.add(createBuilderField(make, field));
-        }
-        for (int i = 0; i < fields.size(); i++) {
-            String next = i + 1 < fields.size()
-                    ? stageNames.get(i + 1) : CAN_BUILD;
-            members.add(createBuilderSetter(make, fields.get(i), next));
-        }
-        members.add(createBuildMethod(make, type, fields, constructorMapping));
-
-        return make.Class(
-                make.Modifiers(EnumSet.of(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)),
-                BUILDER,
-                Collections.emptyList(),
-                null,
-                implementsList,
-                members,
-                Collections.emptyList());
-    }
-
-    private static MethodTree createBuilderConstructor(TreeMaker make) {
-        return make.Method(
-                make.Modifiers(EnumSet.of(Modifier.PRIVATE)),
-                BUILDER,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                make.Block(Collections.emptyList(), false),
-                null);
-    }
-
-    private static VariableTree createBuilderField(TreeMaker make, VariableElement field) {
-        return make.Variable(
-                make.Modifiers(EnumSet.of(Modifier.PRIVATE)),
-                field.getSimpleName(),
-                make.Type(field.asType()),
-                null);
-    }
-
-    private static MethodTree createBuilderSetter(TreeMaker make,
-            VariableElement field, String nextStage) {
-        VariableTree parameter = make.Variable(
-                make.Modifiers(Collections.emptySet()),
-                field.getSimpleName(),
-                make.Type(field.asType()),
-                null);
-        ExpressionTree assignment = make.Assignment(
-                make.MemberSelect(make.Identifier("this"), field.getSimpleName()),
-                make.Identifier(field.getSimpleName()));
-        List<StatementTree> statements = new ArrayList<>();
-        statements.add(make.ExpressionStatement(assignment));
-        statements.add(make.Return(make.Identifier("this")));
-        BlockTree body = make.Block(statements, false);
-        return make.Method(
-                overrideModifiers(make),
-                "set" + CodeGeneratorSupport.upperFirst(field.getSimpleName().toString()),
-                make.Identifier(nextStage),
-                Collections.emptyList(),
-                Collections.singletonList(parameter),
-                Collections.emptyList(),
-                body, null);
-    }
-
-    private static MethodTree createBuildMethod(TreeMaker make, TypeElement type,
-            List<VariableElement> fields, int[] constructorMapping) {
-        List<ExpressionTree> arguments = new ArrayList<>();
-        for (int fieldIndex : constructorMapping) {
-            arguments.add(make.MemberSelect(
-                    make.Identifier("this"),
-                    fields.get(fieldIndex).getSimpleName()));
-        }
-        NewClassTree newClass = make.NewClass(null, Collections.emptyList(),
-                make.Identifier(type.getSimpleName()), arguments, null);
-        BlockTree body = make.Block(
-                Collections.singletonList(make.Return(newClass)), false);
-        return make.Method(
-                overrideModifiers(make),
-                "build",
-                make.Identifier(type.getSimpleName()),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                body, null);
-    }
-
-    private static ModifiersTree overrideModifiers(TreeMaker make) {
-        AnnotationTree override = make.Annotation(
-                make.Identifier("Override"), Collections.emptyList());
-        return make.Modifiers(EnumSet.of(Modifier.PUBLIC),
-                Collections.singletonList(override));
     }
 
     /**
@@ -453,12 +257,12 @@ public final class BuilderGenerator implements CodeGenerator {
                     return error(component, type, "BuilderGenerator.error.exists");
                 }
 
-                List<String> stageNames = stageNames(fields);
+                List<String> stageNames = BuilderAst.stageNames(fields);
                 if (conflictsWithEnclosingOrExistingTypes(type, stageNames)) {
                     LOG.fine("Builder factory: generated type name conflict");
                     return error(component, type, "BuilderGenerator.error.nameConflict");
                 }
-                if (hasDuplicateSetter(fields)) {
+                if (BuilderAst.hasDuplicateSetter(fields)) {
                     LOG.fine("Builder factory: duplicate setter names");
                     return error(component, type, "BuilderGenerator.error.duplicateSetter");
                 }

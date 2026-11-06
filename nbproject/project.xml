@@ -150,12 +150,68 @@
                         <specification-version>8.17</specification-version>
                     </run-dependency>
                 </dependency>
+                <dependency>
+                    <code-name-base>org.netbeans.spi.java.hints</code-name-base>
+                    <build-prerequisite/>
+                    <compile-dependency/>
+                    <run-dependency>
+                        <specification-version>1.66</specification-version>
+                    </run-dependency>
+                </dependency>
+                <dependency>
+                    <code-name-base>org.netbeans.spi.editor.hints</code-name-base>
+                    <build-prerequisite/>
+                    <compile-dependency/>
+                    <run-dependency>
+                        <release-version>0</release-version>
+                        <specification-version>1.74</specification-version>
+                    </run-dependency>
+                </dependency>
             </module-dependencies>
             <test-dependencies>
                 <test-type>
                     <name>unit</name>
                     <test-dependency>
                         <code-name-base>org.netbeans.libs.junit4</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                </test-type>
+                <test-type>
+                    <name>qa-functional</name>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.libs.junit4</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.modules.java.hints.test</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.modules.parsing.nb</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.modules.projectapi.nb</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.modules.java.j2seplatform</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.modules.nbjunit</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.insane</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.libs.freemarker</code-name-base>
+                        <compile-dependency/>
+                    </test-dependency>
+                    <test-dependency>
+                        <code-name-base>org.netbeans.modules.java.platform</code-name-base>
                         <compile-dependency/>
                     </test-dependency>
                 </test-type>
